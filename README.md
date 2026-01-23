@@ -9,12 +9,10 @@ A repository contains frontend for an appointment booking voice AI agent. Backen
 3. Set the LiveKit API Secret private (server-only)
 
 ## Limitations (but working on it)
-1. Users must state the complete date, including the day, month, and year. Partial dates such as “21 January” are not accepted—“21 January 2026” is required.
-2. Users can book an appointment only within a 15-day window from the current date.
-3. The user may need to wait a little longer while the system connects to the room.
-4. At the end of the conversation, the user will experience a brief 4–5 second delay before the summary appears on screen. This delay is part of the system’s processing workflow.
-5. The system does not provide cost or price estimations at the end of a call.
-6. The system can handle up to 15 concurrent booking sessions at a time.
+1. The user may need to wait a little longer while the system connects to the room.
+2. At the end of the conversation, the user will experience a brief 4–5 second delay before the summary appears on screen. This delay is part of the system’s processing workflow.
+3. The system does not provide cost or price estimations at the end of a call.
+4. The system can handle up to 15 concurrent booking sessions at a time.
 
 ## Want to talk with Eternal
 [Click here](https://tryeternal.vercel.app)

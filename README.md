@@ -2,6 +2,7 @@
 A repository contains frontend for an appointment booking voice AI agent. Backend is available [here].(https://github.com/yagnikposhiya/eternal-agent)
 
 <img width="1366" height="768" alt="Talk-with-Eternal" src="https://github.com/user-attachments/assets/9772738e-48cd-4aa3-8e03-c7790e29be80" />
+<img width="1366" height="768" alt="Screenshot from 2026-01-23 18-36-17" src="https://github.com/user-attachments/assets/be8e670a-abfc-43b2-ae2c-84164da0a1a5" />
 
 ## Environment variables (Frontend)
 1. Expose the LiveKit server URL (public) using NEXT_PUBLIC_* variable. It must be public as the browser client needs this URL to connect directly to the LiveKit server. URL is not a creddential, just the address of LiveKit endpoint so it's safe to expose it publicly.

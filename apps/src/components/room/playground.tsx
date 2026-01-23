@@ -57,6 +57,14 @@ type CallSummaryEvent = {
     ts: string;
     ts_local?: string;
     tz?: string;
+
+    session_analytics?: {
+        cost?: {
+            total_usd?: number;
+            breakdown_usd?: Record<string, number>;
+            usage?: Record<string, any>;
+        };
+    };
 };
 
 function EndConversationListener(props: { onEnded: () => void }) {
@@ -106,6 +114,82 @@ function ConnectingOverlay(props: { show: boolean }) {
                     Eternal is joining the room, hold on for a moment while the connection is being established.
                 </div>
             </div>
+        </div>
+    );
+}
+
+function fmtUsd(n?: number) {
+    if (typeof n !== "number" || Number.isNaN(n)) return "—";
+    return `$${n.toFixed(4)}`;
+}
+
+function fmtUsageValue(v: any): string {
+    if (v === null || v === undefined) return "—";
+    if (typeof v === "number") {
+        if (Number.isInteger(v)) return v.toString();
+        return v.toFixed(2);
+    }
+    if (typeof v === "boolean") return v ? "true" : "false";
+    if (typeof v === "string") return v;
+    if (Array.isArray(v)) return `[${v.length} items]`;
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+}
+
+function AnalyticsBlock(props: { ev: CallSummaryEvent }) {
+    const a = props.ev.session_analytics;
+
+    if (!a) return null;
+
+    const cost = a.cost || {};
+
+    const breakdown = cost.breakdown_usd || {};
+
+    const hasAny =
+        (typeof cost.total_usd === "number") ||
+        Object.keys(breakdown).length ||
+        (cost.usage && Object.keys(cost.usage).length > 0);
+
+    if (!hasAny) return null;
+
+    return (
+        <div className="mt-4 space-y-4">
+            <div className="h-px w-full bg-white/10" />
+
+            <div className="text-sm font-semibold text-white">Session Analytics</div>
+
+            {/* COST */}
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div className="text-sm font-medium text-white">Cost</div>
+                <div className="mt-1 text-sm text-white/80">
+                    Total: <span className="font-semibold text-white">{fmtUsd(cost.total_usd)}</span>
+                </div>
+
+                {Object.keys(breakdown).length ? (
+                    <div className="mt-3 space-y-1">
+                        <div className="text-xs text-white/60">Breakdown</div>
+                        {Object.entries(breakdown).map(([k, v]) => (
+                            <div key={k} className="flex items-center justify-between text-sm text-white/80">
+                                <span className="capitalize">{k.replace(/_/g, " ")}</span>
+                                <span className="font-medium text-white">{fmtUsd(v)}</span>
+                            </div>
+                        ))}
+                    </div>
+                ) : null}
+
+                {cost.usage && Object.keys(cost.usage).length ? (
+                    <div className="mt-3 space-y-1">
+                        <div className="text-xs text-white/60">Usage</div>
+                        {Object.entries(cost.usage).map(([k, v]) => (
+                            <div key={k} className="flex items-center justify-between text-sm text-white/80">
+                                <span className="capitalize">{k.replace(/_/g, " ")}</span>
+                                <span className="font-medium text-white">{fmtUsageValue(v)}</span>
+                            </div>
+                        ))}
+                    </div>
+                ) : null}
+            </div>
+
         </div>
     );
 }
@@ -161,34 +245,40 @@ function SummaryDialogController(props: {
                 props.setOpen(v);
             }}
         >
-            <DialogContent className="sm:max-w-[720px] bg-black/70 text-white border border-white/20 backdrop-blur-2xl">
-                <DialogHeader className="text-left">
-                    <DialogTitle className="text-white">Call Summary</DialogTitle>
-                    <DialogDescription className="text-white/70">
-                        {generating ? "Summary is being generated…" : "Here’s what you have talked with Eternal."}
-                    </DialogDescription>
+            <DialogContent className="sm:max-w-[720px] bg-black/70 text-white border border-white/20 backdrop-blur-2xl max-h-[85vh] overflow-hidden p-0">
+                <div className="flex max-h-[85vh] flex-col">
+                    {/* Header stays fixed */}
+                    <DialogHeader className="shrink-0 text-left px-6 pt-6">
+                        <DialogTitle className="text-white">Call Summary & Analytics</DialogTitle>
+                        <DialogDescription className="text-white/70">
+                            {generating ? "Summary is being generated…" : "Here’s what you have talked with Eternal."}
+                        </DialogDescription>
 
-                    {/* Divider */}
-                    <div className="mt-2 h-px w-full bg-white/20" />
-                </DialogHeader>
+                        {/* Divider */}
+                        <div className="mt-2 h-px w-full bg-white/20" />
+                    </DialogHeader>
 
-                {generating ? (
-                    <div className="mt-4 flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-4">
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        <div className="text-sm text-white/80">Summary is being generated…</div>
+                    {/* Scrollable body */}
+                    <div className="flex-1 overflow-y-auto px-6 pb-6">
+                        {generating ? (
+                            <div className="mt-4 flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-4">
+                                <Loader2 className="h-5 w-5 animate-spin" />
+                                <div className="text-sm text-white/80">Summary is being generated…</div>
+                            </div>
+                        ) : props.summary ? (
+                            <div className="p-0 text-left">
+                                <div className="text-sm whitespace-pre-wrap text-white/90 mt-4">
+                                    {props.summary.summary_text}
+                                </div>
+                                <AnalyticsBlock ev={props.summary} />
+                            </div>
+                        ) : null}
                     </div>
-                ) : props.summary ? (
-                    <div className="p-0 text-left">
-                        <div className="text-sm whitespace-pre-wrap text-white/90">
-                            {props.summary.summary_text}
-                        </div>
-                    </div>
-                ) : null}
+                </div>
             </DialogContent>
         </Dialog>
     );
 }
-
 
 function AvatarFullStage() {
     const cameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: false }]);

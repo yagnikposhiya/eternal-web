@@ -17,6 +17,7 @@ import {
     useDataChannel,
 } from "@livekit/components-react";
 
+import { Button } from "@/components/ui/button";
 import Navbar from "../layout/navbar";
 import Hero from "../layout/hero";
 import Footer from "../layout/footer";
@@ -40,12 +41,20 @@ import {
     MessageSquare,
     MessageSquareOff,
     UserRound,
+    ClosedCaption,
+    CaptionsOff,
 } from "lucide-react";
 
 type TokenResponse = {
     token: string;
     url?: string;
     error?: string;
+};
+
+type UserCaptionEvent = {
+    type: "user_caption";
+    transcript: string;
+    is_final: boolean;
 };
 
 type CallSummaryEvent = {
@@ -66,6 +75,71 @@ type CallSummaryEvent = {
         };
     };
 };
+
+function decodePayload(payload: Uint8Array | ArrayBuffer | string | undefined): string {
+    if (payload == null) return "";
+    if (typeof payload === "string") return payload;
+    const bytes = payload instanceof Uint8Array ? payload : new Uint8Array(payload);
+    return new TextDecoder().decode(bytes);
+}
+
+function LiveCaptions(props: { enabled: boolean }) {
+    const { message } = useDataChannel("user_captions");
+    const [lines, setLines] = useState<string[]>([]);
+    const [interim, setInterim] = useState("");
+    const maxLines = 2;
+
+    useEffect(() => {
+        if (!props.enabled || !message?.payload) return;
+        try {
+            const txt = decodePayload(message.payload);
+            if (!txt.trim()) return;
+            const ev = JSON.parse(txt) as UserCaptionEvent;
+            if (ev?.type !== "user_caption" || !ev.transcript?.trim()) return;
+
+            const trimmed = ev.transcript.trim();
+
+            if (ev.is_final) {
+                setLines((prev) => {
+                    const last = prev[prev.length - 1];
+                    if (last === trimmed) return prev;
+                    return [...prev.slice(-(maxLines - 1)), trimmed];
+                });
+                setInterim("");
+            } else {
+                setInterim(trimmed);
+            }
+        } catch {
+            /* ignore malformed packets */
+        }
+    }, [message, props.enabled]);
+
+    if (!props.enabled) return null;
+
+    const hasContent = lines.length > 0 || interim.length > 0;
+    if (!hasContent) return null;
+
+    return (
+        <div
+            className="absolute left-1/2 z-[45] -translate-x-1/2 w-full max-w-3xl px-4"
+            style={{ bottom: "6.5rem" }}
+        >
+            <div className="mx-auto rounded px-4 py-2 bg-black/70 shadow-lg">
+                <div className="text-center text-base font-medium text-white leading-relaxed">
+                    {lines.map((line, i) => (
+                        <div key={i}>{line}</div>
+                    ))}
+                    {interim ? (
+                        <div className="inline-flex items-center gap-1 text-white/90 italic">
+                            <span>{interim}</span>
+                            <span className="inline-block w-2 h-4 bg-white/90 animate-pulse rounded-sm" aria-hidden />
+                        </div>
+                    ) : null}
+                </div>
+            </div>
+        </div>
+    );
+}
 
 function EndConversationListener(props: { onEnded: () => void }) {
     const { message: toolMsg } = useDataChannel("tool_events");
@@ -389,6 +463,9 @@ function MeetControls(props: {
 
     panelOpen: boolean;
     onTogglePanel: () => void;
+
+    captionsOn: boolean;
+    onToggleCaptions: () => void;
 }) {
 
     const room = useRoomContext();
@@ -447,6 +524,18 @@ function MeetControls(props: {
                     title={props.panelOpen ? "Close tool call panel" : "Open tool call panel"}
                 >
                     {props.panelOpen ? <MessageSquare className="h-5 w-5" /> : <MessageSquareOff className="h-5 w-5" />}
+                </button>
+
+                <button
+                    onClick={props.onToggleCaptions}
+                    className={[
+                        "cursor-pointer grid h-11 w-11 place-items-center rounded-full text-white transition",
+                        props.captionsOn ? "bg-white/20 hover:bg-white/25" : "bg-white/10 hover:bg-white/15",
+                    ].join(" ")}
+                    aria-label={props.captionsOn ? "Hide captions" : "Show captions"}
+                    title={props.captionsOn ? "Hide captions" : "Show captions"}
+                >
+                    {props.captionsOn ? <ClosedCaption className="h-5 w-5" /> : <CaptionsOff className="h-5 w-5" />}
                 </button>
 
                 <button
@@ -563,6 +652,9 @@ export default function VoicePlayground() {
     const [micOn, setMicOn] = useState(true);
     const [camOn, setCamOn] = useState(true);
 
+    const [captionsEnabled, setCaptionsEnabled] = useState(false);
+    const [captionsWarningOpen, setCaptionsWarningOpen] = useState(false);
+
     const handleSummaryReady = useCallback(() => {
         setSummaryReady(true);
     }, []);
@@ -623,6 +715,21 @@ export default function VoicePlayground() {
         setPanelOpen(true);
         setSummaryDialogOpen(false);
         setSummaryEvent(null);
+        setCaptionsEnabled(false);
+        setCaptionsWarningOpen(false);
+    }
+
+    function handleToggleCaptions() {
+        if (captionsEnabled) {
+            setCaptionsEnabled(false);
+        } else {
+            setCaptionsWarningOpen(true);
+        }
+    }
+
+    function handleConfirmCaptionsEnable() {
+        setCaptionsEnabled(true);
+        setCaptionsWarningOpen(false);
     }
 
     if (!serverUrl) {
@@ -691,6 +798,34 @@ export default function VoicePlayground() {
                 onSummaryReady={handleSummaryReady}
             />
 
+            {/* Latency warning when user enables captions */}
+            <Dialog open={captionsWarningOpen} onOpenChange={setCaptionsWarningOpen}>
+                <DialogContent className="sm:max-w-[420px] bg-black/80 border border-white/20 backdrop-blur-3xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-white">Enable captions</DialogTitle>
+                        <DialogDescription className="text-white/80">
+                            It may increase latency. The avatar may reply slightly later than when captions are off.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex justify-end gap-3 mt-4">
+                        <Button
+                            type="button"
+                            onClick={() => setCaptionsWarningOpen(false)}
+                            className="cursor-pointer px-4 py-2 rounded-lg bg-white/10 text-white hover:bg-white/15 transition"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="button"
+                            onClick={handleConfirmCaptionsEnable}
+                            className="cursor-pointer px-4 py-2 rounded-lg bg-red-500/70"
+                        >
+                            Enable
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
 
             {/* Watch for the remote avatar track; hide connecting overlay when ready */}
             <AvatarReadyWatcher onReady={() => setAvatarReady(true)} />
@@ -708,6 +843,9 @@ export default function VoicePlayground() {
                     <div className="relative h-full overflow-hidden p-4">
                         <AvatarFullStage />
 
+                        {/* User speech live captions (YouTube-style, above controls); only when enabled */}
+                        <LiveCaptions enabled={captionsEnabled} />
+
                         {/* Local draggable small tile */}
                         <DraggableLocalTile camOn={camOn} />
 
@@ -721,6 +859,8 @@ export default function VoicePlayground() {
                             setCamOn={setCamOn}
                             panelOpen={panelOpen}
                             onTogglePanel={() => setPanelOpen((v) => !v)}
+                            captionsOn={captionsEnabled}
+                            onToggleCaptions={handleToggleCaptions}
                         />
 
                     </div>
